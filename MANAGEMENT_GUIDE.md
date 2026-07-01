@@ -1,42 +1,58 @@
-# Sickle Cell Advisor - Management Guide
+# Sickle Cell Advisor - Management & Safety Guide
 
-This guide explains how to manage the Sickle Cell Advisor's knowledge and behavior without touching any code.
+This guide explains how to manage the Sickle Cell Advisor's knowledge, behavior, and safety protocols.
 
 ---
 
-## 1. Adding New Medical Documents
-To give the agent new information (like new research papers, care guides, or PDFs), follow these steps:
+## 1. Managing the Knowledge Corpus (Adding Documents)
+To give the agent new medical information, follow these steps:
 
 1.  **Open the Google Cloud Console**: Go to the [Cloud Storage Browser](https://console.cloud.google.com/storage/browser).
-2.  **Select your Bucket**: Click on the bucket named `caregiver-corpus` (or the one configured for your project).
+2.  **Select your Bucket**: Click on the bucket named `caregiver-corpus`.
 3.  **Upload Files**: 
     *   Drag and drop your PDF or Word documents directly into the browser window.
-    *   Or click the **"Upload Files"** button at the top.
-4.  **Automatic Processing**: Vertex AI Search will automatically detect these new files. 
-    *   **Note**: It usually takes **15–30 minutes** for new documents to be indexed and "learned" by the agent.
+    *   **Note**: It takes **15–30 minutes** for new documents to be indexed and "learned" by the agent.
 
 ---
 
-## 2. Changing the Agent's Behavior (The Prompt)
-If you want to change how the agent speaks, what it prioritizes, or add new "house rules," you can do so by editing a single text file.
+## 2. Managing Agent Behavior (The Prompt)
+You can change the agent's "personality" or rules without touching any code:
 
-1.  **Find the Prompt File**: In your Cloud Storage bucket, look for a folder named `config` and a file named `instructions.txt`.
-2.  **Edit the File**:
-    *   Click on `instructions.txt`.
-    *   Click the **"Edit"** button at the top of the screen.
-    *   Type your new instructions (e.g., "Always remind users to stay hydrated" or "Use a more casual tone").
+1.  **Find the Instruction File**: In your bucket, go to the folder `config` and open `instructions.txt`.
+2.  **Edit**: Click the **"Edit"** button. Type your new rules or instructions.
 3.  **Save**: Click **"Save"**.
-4.  **Refresh**: The agent will pick up these new instructions automatically within a few minutes (or after a quick restart of the service).
+4.  **Update**: Users just need to **refresh their browser** to see the new behavior in their next chat.
 
 ---
 
-## 3. Best Practices for Documents
-*   **Format**: PDFs are the best format for medical documents.
-*   **Clean Text**: Ensure the PDFs are not just "images of text" (they should be searchable/selectable).
-*   **File Names**: Use clear, descriptive file names (e.g., `hydration-guide-2026.pdf` instead of `doc123.pdf`). This helps the agent cite its sources better.
+## 3. Safety & Drift Protection (Built-in)
+We have built "Anti-Drift" technology directly into the machine to protect distressed parents from false information:
+
+*   **Internal Verification**: For every question, the agent is forced to "think" internally and verify the facts against the corpus before it speaks.
+*   **Silent Reinforcements**: The system secretly reminds the AI of its strict safety rules on every single message cycle. This prevents the AI from "forgetting" its boundaries in long conversations.
+*   **Emotional Guardrails**: If a user expresses distress or trickery, the agent is programmed to respond with bounded empathy and refocus on reliable medical facts.
+
+---
+
+## 4. Verifying Sources (Clickable Grounding)
+The agent provides "Sources" at the bottom of its answers:
+*   **Click to View**: You can click on any source to go directly to the original document in the Google Cloud Console.
+*   **Transparency**: This allows you to verify exactly which page of which PDF the agent used for its answer.
+
+---
+
+## 5. Code Management & Deployment
+If you need to move the code or update the service:
+
+1.  **Source of Truth**: The latest working code is always in the GitHub repository: `mcoverturf/sca-advisor`.
+2.  **Cloud Shell**: Open Cloud Shell and run `git pull` to get the latest version.
+3.  **Deployment**: To push changes live to Cloud Run, run:
+    ```bash
+    gcloud run deploy sca-advisor --source . --region us-central1 --quiet
+    ```
 
 ---
 
 ## Troubleshooting
-*   **Agent isn't using new info**: Wait at least 30 minutes for the search engine to finish indexing.
 *   **Permission Errors**: Ensure you are logged in with your `@maryland.gov` account.
+*   **"I don't know" Answers**: This means the information is missing from the corpus. Simply upload the relevant PDF to the bucket to fix it.
