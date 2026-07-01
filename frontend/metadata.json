@@ -1,0 +1,4 @@
+{
+  "name": "Sickle Cell Advisor",
+  "description": "A RAG-style chat agent grounded in a specific medical corpus datastore using Vertex AI Search to advise on Sickle Cell."
+}
