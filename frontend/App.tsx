@@ -56,10 +56,21 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY, vertexai: true });
       const datastorePath = `projects/${settings.projectId}/locations/${settings.location}/collections/default_collection/dataStores/${settings.datastoreId}`;
 
+      let activeInstructions = SYSTEM_INSTRUCTION;
+      try {
+        const resp = await fetch('/api/config/instructions');
+        const data = await resp.json();
+        if (data.instructions) {
+          activeInstructions = data.instructions;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch remote instructions, using default.', e);
+      }
+
       const session = ai.chats.create({
         model: 'gemini-3.5-flash',
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: activeInstructions,
           tools: [{
             retrieval: {
               vertexAiSearch: {

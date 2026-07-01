@@ -6,6 +6,7 @@
  */
 import 'dotenv/config';
 import express from 'express';
+import { Storage } from "@google-cloud/storage";
 import { GoogleAuth } from 'google-auth-library';
 import fetch from 'node-fetch';
 import rateLimit from 'express-rate-limit';
@@ -393,6 +394,30 @@ app.get(/.*/, (req, res, next) => {
     return next();
   }
   res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
+
+// --- System Instruction Management ---
+const storage = new Storage();
+const INSTRUCTIONS_BUCKET = process.env.GOOGLE_CLOUD_PROJECT; // Using project ID as default bucket name
+const INSTRUCTIONS_PATH = 'config/instructions.txt';
+
+app.get('/api/config/instructions', async (req, res) => {
+  try {
+    const bucket = storage.bucket(INSTRUCTIONS_BUCKET);
+    const file = bucket.file(INSTRUCTIONS_PATH);
+    
+    const [exists] = await file.exists();
+    if (!exists) {
+      console.log(`Instructions file not found at gs://${INSTRUCTIONS_BUCKET}/${INSTRUCTIONS_PATH}, using default.`);
+      return res.json({ instructions: null });
+    }
+
+    const [content] = await file.download();
+    res.json({ instructions: content.toString() });
+  } catch (error) {
+    console.error('Error fetching instructions from GCS:', error);
+    res.json({ instructions: null });
+  }
 });
 
 const server = app.listen(PORT, API_BACKEND_HOST, () => {
