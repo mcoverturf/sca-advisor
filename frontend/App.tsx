@@ -114,7 +114,9 @@ export default function App() {
     setError(null);
 
     try {
-      const responseStream = await chatSession.sendMessageStream({ message: userText });
+      // Pre-send reinforcement to prevent context drift
+      const strictReminder = "\n\n[STRICT REMINDER: Answer ONLY using the medical corpus. If the answer isn't there, say you don't know. Do not speculate.]";
+      const responseStream = await chatSession.sendMessageStream({ message: userText + strictReminder });
       
       setMessages(prev => [...prev, { role: 'model', text: '', isStreaming: true }]);
 
