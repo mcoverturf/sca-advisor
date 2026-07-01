@@ -11,9 +11,9 @@ const DEFAULT_PROJECT_ID = 'gen-lang-client-0240369598';
 
 export default function App() {
   const [settings, setSettings] = useState<AppSettings>({
-    projectId: DEFAULT_PROJECT_ID,
-    location: 'global',
-    datastoreId: DEFAULT_DATASTORE
+    projectId: 'gen-lang-client-0240369598',
+    location: 'us',
+    datastoreId: 'caregiver-corpus_1782918777478'
   });
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -57,7 +57,7 @@ export default function App() {
       const datastorePath = `projects/${settings.projectId}/locations/${settings.location}/collections/default_collection/dataStores/${settings.datastoreId}`;
 
       const session = ai.chats.create({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.5-flash',
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
           tools: [{
@@ -111,15 +111,16 @@ export default function App() {
       let extractedSources: GroundingSource[] = [];
 
       for await (const chunk of responseStream) {
-        fullResponse += chunk.text;
+        const chunkText = chunk.text || '';
+        fullResponse += chunkText;
         
         const candidate = chunk.candidates?.[0];
         const groundingMetadata = candidate?.groundingMetadata;
         if (groundingMetadata?.groundingChunks) {
           const chunks = groundingMetadata.groundingChunks;
           const sourcesList: GroundingSource[] = chunks.map((c: any) => {
-            const uri = c.web?.uri || c.retrievalChunk?.uri || c.retrievalChunk?.source?.uri || '';
-            const title = c.web?.title || c.retrievalChunk?.title || c.retrievalChunk?.source?.title || '';
+            const uri = c.web?.uri || c.retrievalChunk?.uri || c.retrievalChunk?.source?.uri || c.retrievalChunk?.metadata?.uri || '';
+            const title = c.web?.title || c.retrievalChunk?.title || c.retrievalChunk?.source?.title || c.retrievalChunk?.metadata?.title || '';
             
             let bucketName = undefined;
             let fileName = undefined;

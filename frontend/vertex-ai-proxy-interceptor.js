@@ -13,48 +13,33 @@
   // Function to validate VertexGenAi endpoints
   function isValidUrl(url) {
     try {
-      const HOST_NAME = 'aiplatform.googleapis.com';
-      const MODEL_METHODS = ['generateContent', 'predict', 'streamGenerateContent'];
-      const AGENT_METHODS = ['query', 'streamQuery'];
-      const isSafePathSegment = (val) => val && encodeURIComponent(val) === val;
-
       const urlObj = new URL(url);
-      if (!urlObj.hostname.endsWith(HOST_NAME)) {
+      const hostname = urlObj.hostname;
+      
+      // Allow global and regional Vertex AI endpoints
+      if (!hostname.endsWith('aiplatform.googleapis.com')) {
         return false;
       }
 
-      const pathSegments = urlObj.pathname.split('/');
-      // Publisher models
-      // Expected structure: ['', '{version}', 'publishers', 'google', 'models', '{model}:{method}']
-      if (pathSegments.length === 6 &&
-        pathSegments[0] === '' &&
-        pathSegments[2] === 'publishers' &&
-        pathSegments[3] === 'google' &&
-        pathSegments[4] === 'models' && urlObj.hostname === HOST_NAME) {
-          if (!isSafePathSegment(pathSegments[1])) {
-            return false;
-          }
-          const modelAndMethod = pathSegments[5].split(':');
-          return modelAndMethod.length === 2 && isSafePathSegment(modelAndMethod[0]) && MODEL_METHODS.includes(modelAndMethod[1]);
-      }
-
-      // Reasoning Engines
-      // Expected structrue: ['', '{version}', 'projects', 'locations', 'reasoningEngines', '{id}:{method}']
-      if (pathSegments.length === 8 &&
-        pathSegments[0] === '' &&
-        pathSegments[2] === 'projects' &&
-        pathSegments[4] === 'locations' &&
-        pathSegments[6] === 'reasoningEngines' && urlObj.hostname.endsWith(`-${HOST_NAME}`)) {
-          if (!isSafePathSegment(pathSegments[1]) || !isSafePathSegment(pathSegments[3]) || !isSafePathSegment(pathSegments[5])) {
-            return false;
-          }
-          const idAndMethod = pathSegments[7].split(':');
-          return idAndMethod.length === 2 && isSafePathSegment(idAndMethod[0]) && AGENT_METHODS.includes(idAndMethod[1]);
-      }
-
+      const path = urlObj.pathname;
       
+      // Standard Vertex AI Publisher Model methods
+      if (path.includes('/publishers/google/models/') && 
+          (path.endsWith(':generateContent') || 
+           path.endsWith(':streamGenerateContent') || 
+           path.endsWith(':predict'))) {
+        return true;
+      }
+      
+      // Reasoning Engines / Agents
+      if (path.includes('/reasoningEngines/') && 
+          (path.endsWith(':query') || 
+           path.endsWith(':streamQuery'))) {
+        return true;
+      }
+
       // Live API (WebSocket)
-      if (url === 'wss://aiplatform.googleapis.com//ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent') {
+      if (url.includes('/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent')) {
         return true;
       }
 

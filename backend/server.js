@@ -10,11 +10,13 @@ import { GoogleAuth } from 'google-auth-library';
 import fetch from 'node-fetch';
 import rateLimit from 'express-rate-limit';
 import { WebSocketServer, WebSocket } from 'ws';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 app.use(express.json({limit: process?.env?.API_PAYLOAD_MAX_SIZE || "7mb"}));
 
-const PORT = process?.env?.API_BACKEND_PORT || 5000;
+const PORT = process?.env?.PORT || process?.env?.API_BACKEND_PORT || 5000;
 const API_BACKEND_HOST = process?.env?.API_BACKEND_HOST || "127.0.0.1";
 
 const GOOGLE_CLOUD_LOCATION = process?.env?.GOOGLE_CLOUD_LOCATION;
@@ -48,7 +50,7 @@ const proxyLimiter = rateLimit({
 app.use('/api-proxy', proxyLimiter);
 
 const API_CLIENT_MAP = [
- {
+  {
     name: "VertexGenAi:generateContent",
     patternForProxy: "https://aiplatform.googleapis.com/{{version}}/publishers/google/models/{{model}}:generateContent",
     getApiEndpoint: (context, params) => {
@@ -57,7 +59,16 @@ const API_CLIENT_MAP = [
     isStreaming: false,
     transformFn: null,
   },
- {
+  {
+    name: "VertexGenAi:generateContentRegional",
+    patternForProxy: "https://{{region}}-aiplatform.googleapis.com/{{version}}/projects/{{project}}/locations/{{location}}/publishers/google/models/{{model}}:generateContent",
+    getApiEndpoint: (context, params) => {
+      return `https://aiplatform.clients6.google.com/${params['version']}/projects/${params['project']}/locations/${params['location']}/publishers/google/models/${params['model']}:generateContent`;
+    },
+    isStreaming: false,
+    transformFn: null,
+  },
+  {
     name: "VertexGenAi:predict",
     patternForProxy: "https://aiplatform.googleapis.com/{{version}}/publishers/google/models/{{model}}:predict",
     getApiEndpoint: (context, params) => {
@@ -66,11 +77,53 @@ const API_CLIENT_MAP = [
     isStreaming: false,
     transformFn: null,
   },
- {
+  {
+    name: "VertexGenAi:predictRegional",
+    patternForProxy: "https://{{region}}-aiplatform.googleapis.com/{{version}}/projects/{{project}}/locations/{{location}}/publishers/google/models/{{model}}:predict",
+    getApiEndpoint: (context, params) => {
+      return `https://aiplatform.clients6.google.com/${params['version']}/projects/${params['project']}/locations/${params['location']}/publishers/google/models/${params['model']}:predict`;
+    },
+    isStreaming: false,
+    transformFn: null,
+  },
+  {
     name: "VertexGenAi:streamGenerateContent",
     patternForProxy: "https://aiplatform.googleapis.com/{{version}}/publishers/google/models/{{model}}:streamGenerateContent",
     getApiEndpoint: (context, params) => {
       return `https://aiplatform.clients6.google.com/${params['version']}/projects/${context.projectId}/locations/${context.region}/publishers/google/models/${params['model']}:streamGenerateContent`;
+    },
+    isStreaming: true,
+    transformFn: (response) => {
+        let normalizedResponse = response.trim();
+        while (normalizedResponse.startsWith(',') || normalizedResponse.startsWith('[')) {
+          normalizedResponse = normalizedResponse.substring(1).trim();
+        }
+        while (normalizedResponse.endsWith(',') || normalizedResponse.endsWith(']')) {
+          normalizedResponse = normalizedResponse.substring(0, normalizedResponse.length - 1).trim();
+        }
+
+        if (!normalizedResponse.length) {
+          return {result: null, inProgress: false};
+        }
+
+        if (!normalizedResponse.endsWith('}')) {
+          return {result: normalizedResponse, inProgress: true};
+        }
+
+        try {
+          const parsedResponse = JSON.parse(`${normalizedResponse}`);
+          const transformedResponse = `data: ${JSON.stringify(parsedResponse)}\n\n`;
+          return {result: transformedResponse, inProgress: false};
+        } catch (error) {
+          throw new Error(`Failed to parse response: ${error}.`);
+        }
+    },
+  },
+  {
+    name: "VertexGenAi:streamGenerateContentRegional",
+    patternForProxy: "https://{{region}}-aiplatform.googleapis.com/{{version}}/projects/{{project}}/locations/{{location}}/publishers/google/models/{{model}}:streamGenerateContent",
+    getApiEndpoint: (context, params) => {
+      return `https://aiplatform.clients6.google.com/${params['version']}/projects/${params['project']}/locations/${params['location']}/publishers/google/models/${params['model']}:streamGenerateContent`;
     },
     isStreaming: true,
     transformFn: (response) => {
@@ -236,6 +289,10 @@ app.post('/api-proxy', async (req, res) => {
       return res.status(400).json({ error: 'Upstream host not allowed.' });
     }
     console.log(`[Node Proxy] Forwarding to Vertex API: ${apiUrl}`);
+    if (body) {
+      console.log(`[Node Proxy] Request Body: ${JSON.stringify(body).substring(0, 2000)}...`);
+    }
+
 
     // 4. Prepare headers for the API call
     const apiHeaders = getRequestHeaders(accessToken);
@@ -321,6 +378,21 @@ app.post('/api-proxy', async (req, res) => {
     console.error(error)
     res.status(500).json({ error: error });
   }
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files from Vite build directory
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+app.use(express.static(frontendDistPath));
+
+// Fallback all other GET requests to index.html for SPA routing
+app.get(/.*/, (req, res, next) => {
+  if (req.path.startsWith('/api-proxy') || req.path.startsWith('/ws-proxy')) {
+    return next();
+  }
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
 });
 
 const server = app.listen(PORT, API_BACKEND_HOST, () => {
