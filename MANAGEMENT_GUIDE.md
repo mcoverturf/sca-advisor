@@ -8,7 +8,7 @@ This guide explains how to manage the Sickle Cell Advisor's knowledge, behavior,
 To give the agent new medical information, follow these steps:
 
 1.  **Open the Google Cloud Console**: Go to the [Cloud Storage Browser](https://console.cloud.google.com/storage/browser).
-2.  **Select your Bucket**: Click on the bucket named `caregiver-corpus`.
+2.  **Select your Bucket**: Click on the bucket named `caregivercorpus`.
 3.  **Upload Files**: 
     *   Drag and drop your PDF or Word documents directly into the browser window.
     *   **Note**: It takes **15–30 minutes** for new documents to be indexed and "learned" by the agent.

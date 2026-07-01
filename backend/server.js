@@ -398,7 +398,7 @@ app.get(/.*/, (req, res, next) => {
 
 // --- System Instruction Management ---
 const storage = new Storage();
-const INSTRUCTIONS_BUCKET = process.env.GOOGLE_CLOUD_PROJECT; // Using project ID as default bucket name
+const INSTRUCTIONS_BUCKET = 'caregivercorpus'; 
 const INSTRUCTIONS_PATH = 'config/instructions.txt';
 
 app.get('/api/config/instructions', async (req, res) => {
