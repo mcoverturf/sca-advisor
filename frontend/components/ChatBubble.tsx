@@ -46,7 +46,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
           <div className="px-2 mt-1">
             <p className="text-xs font-semibold text-gray-500 mb-1">Sources used from medical corpus:</p>
             <div className="flex flex-col gap-1.5">
-              {message.sources.map((source, idx) => {
+              {message.sources.filter(s => s.uri).map((source, idx) => {
                 const isGs = source.uri?.startsWith('gs://');
                 let consoleLink = source.uri;
                 if (isGs && source.bucketName && source.fileName) {

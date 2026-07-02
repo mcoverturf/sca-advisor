@@ -43,7 +43,7 @@ export default function App() {
     }
   }, [input]);
 
-  const initChat = () => {
+  const initChat = async () => {
     if (!settings.projectId.trim()) {
       setError("Please configure your Project ID in settings.");
       setIsSettingsOpen(true);
@@ -155,7 +155,7 @@ export default function App() {
 
           if (sourcesList.length > 0) {
             const uniqueSources = Array.from(new Map(sourcesList.map(item => [item.uri, item])).values());
-            extractedSources = uniqueSources;
+            extractedSources = uniqueSources.filter(s => s.uri);
           }
         }
 
@@ -214,7 +214,7 @@ export default function App() {
       <div className="flex-1 flex flex-col min-w-0 relative">
         
         {/* Header */}
-        <header className="h-16 bg-white border-b flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
+        <header className="h-20 bg-white border-b flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSettingsOpen(!isSettingsOpen)} 
@@ -224,15 +224,23 @@ export default function App() {
               <SettingsIcon className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-lg font-semibold text-gray-800 leading-tight">Sickle Cell Advisor</h1>
-              <p className="text-[10px] text-gray-400 font-mono">Project: {settings.projectId}</p>
+              <h1 className="text-xl font-bold text-gray-800 leading-tight">Sickle Cell Advisor</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
-             <span className={`w-2 h-2 rounded-full ${chatSession ? 'bg-green-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`}></span>
-             <span className="text-xs text-gray-600 font-medium">
-               {chatSession ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
-             </span>
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden lg:flex flex-col items-end justify-center text-right">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-0.5">Maryland Department of Health</span>
+              <span className="text-xs font-semibold text-gray-700 leading-tight">Office of Children and Youth with Specific Health Care Needs</span>
+            </div>
+            <div className="h-12 w-px bg-gray-200 hidden lg:block mx-1"></div>
+            <img src="/mdh-logo.jpg" alt="Maryland Department of Health" className="h-12 w-auto object-contain" />
+            <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 ml-2">
+               <span className={`w-2 h-2 rounded-full ${chatSession ? 'bg-green-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`}></span>
+               <span className="text-xs text-gray-600 font-medium">
+                 {chatSession ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+               </span>
+            </div>
           </div>
         </header>
 
