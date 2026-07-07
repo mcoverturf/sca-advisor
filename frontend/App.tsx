@@ -209,6 +209,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800 leading-tight">Sickle Cell Advisor</h1>
+              <span className="text-[10px] text-gray-500 font-medium block -mt-0.5">v1.0.1</span>
             </div>
           </div>
 
