@@ -95,9 +95,15 @@ const API_CLIENT_MAP = [
     },
     isStreaming: true,
     transformFn: (response) => {
-        let normalizedResponse = response.trim();
-        while (normalizedResponse.startsWith(',') || normalizedResponse.startsWith('[')) {
-          normalizedResponse = normalizedResponse.substring(1).trim();
+        let normalizedResponse = response;
+        // Remove leading whitespace/commas/brackets ONLY from the start of the structural stream
+        while (normalizedResponse.length > 0 && 
+               (normalizedResponse[0] === ',' || 
+                normalizedResponse[0] === '[' || 
+                normalizedResponse[0] === ' ' || 
+                normalizedResponse[0] === '\n' || 
+                normalizedResponse[0] === '\r')) {
+          normalizedResponse = normalizedResponse.substring(1);
         }
 
         if (!normalizedResponse.length) {
@@ -118,7 +124,7 @@ const API_CLIENT_MAP = [
             result += `data: ${JSON.stringify(parsedResponse)}\n\n`;
             lastSuccessfulPos = nextBrace + 1;
             
-            // Skip over any trailing commas or whitespace
+            // Skip over structural whitespace/commas between objects
             while (lastSuccessfulPos < normalizedResponse.length && 
                    (normalizedResponse[lastSuccessfulPos] === ',' || 
                     normalizedResponse[lastSuccessfulPos] === ' ' || 
@@ -133,8 +139,8 @@ const API_CLIENT_MAP = [
           }
         }
 
-        const remaining = normalizedResponse.substring(lastSuccessfulPos).trim();
-        const isDone = remaining === ']' || remaining === '';
+        const remaining = normalizedResponse.substring(lastSuccessfulPos);
+        const isDone = remaining.trim() === ']' || remaining.trim() === '';
         
         return {
           result: result.length ? result : null, 
@@ -151,9 +157,15 @@ const API_CLIENT_MAP = [
     },
     isStreaming: true,
     transformFn: (response) => {
-        let normalizedResponse = response.trim();
-        while (normalizedResponse.startsWith(',') || normalizedResponse.startsWith('[')) {
-          normalizedResponse = normalizedResponse.substring(1).trim();
+        let normalizedResponse = response;
+        // Remove leading whitespace/commas/brackets ONLY from the start of the structural stream
+        while (normalizedResponse.length > 0 && 
+               (normalizedResponse[0] === ',' || 
+                normalizedResponse[0] === '[' || 
+                normalizedResponse[0] === ' ' || 
+                normalizedResponse[0] === '\n' || 
+                normalizedResponse[0] === '\r')) {
+          normalizedResponse = normalizedResponse.substring(1);
         }
 
         if (!normalizedResponse.length) {
@@ -174,7 +186,7 @@ const API_CLIENT_MAP = [
             result += `data: ${JSON.stringify(parsedResponse)}\n\n`;
             lastSuccessfulPos = nextBrace + 1;
             
-            // Skip over any trailing commas or whitespace
+            // Skip over structural whitespace/commas between objects
             while (lastSuccessfulPos < normalizedResponse.length && 
                    (normalizedResponse[lastSuccessfulPos] === ',' || 
                     normalizedResponse[lastSuccessfulPos] === ' ' || 
@@ -189,8 +201,8 @@ const API_CLIENT_MAP = [
           }
         }
 
-        const remaining = normalizedResponse.substring(lastSuccessfulPos).trim();
-        const isDone = remaining === ']' || remaining === '';
+        const remaining = normalizedResponse.substring(lastSuccessfulPos);
+        const isDone = remaining.trim() === ']' || remaining.trim() === '';
         
         return {
           result: result.length ? result : null, 
