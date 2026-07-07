@@ -99,25 +99,48 @@ const API_CLIENT_MAP = [
         while (normalizedResponse.startsWith(',') || normalizedResponse.startsWith('[')) {
           normalizedResponse = normalizedResponse.substring(1).trim();
         }
-        while (normalizedResponse.endsWith(',') || normalizedResponse.endsWith(']')) {
-          normalizedResponse = normalizedResponse.substring(0, normalizedResponse.length - 1).trim();
-        }
 
         if (!normalizedResponse.length) {
           return {result: null, inProgress: false};
         }
 
-        if (!normalizedResponse.endsWith('}')) {
-          return {result: normalizedResponse, inProgress: true};
+        let result = '';
+        let lastSuccessfulPos = 0;
+        let currentPos = 0;
+
+        while (currentPos < normalizedResponse.length) {
+          const nextBrace = normalizedResponse.indexOf('}', currentPos);
+          if (nextBrace === -1) break;
+          
+          const potentialJson = normalizedResponse.substring(lastSuccessfulPos, nextBrace + 1);
+          try {
+            const parsedResponse = JSON.parse(potentialJson);
+            result += `data: ${JSON.stringify(parsedResponse)}\n\n`;
+            lastSuccessfulPos = nextBrace + 1;
+            
+            // Skip over any trailing commas or whitespace
+            while (lastSuccessfulPos < normalizedResponse.length && 
+                   (normalizedResponse[lastSuccessfulPos] === ',' || 
+                    normalizedResponse[lastSuccessfulPos] === ' ' || 
+                    normalizedResponse[lastSuccessfulPos] === '\n' || 
+                    normalizedResponse[lastSuccessfulPos] === '\r')) {
+              lastSuccessfulPos++;
+            }
+            currentPos = lastSuccessfulPos;
+          } catch (error) {
+            // Not a complete object (maybe nested braces), keep looking
+            currentPos = nextBrace + 1;
+          }
         }
 
-        try {
-          const parsedResponse = JSON.parse(`${normalizedResponse}`);
-          const transformedResponse = `data: ${JSON.stringify(parsedResponse)}\n\n`;
-          return {result: transformedResponse, inProgress: false};
-        } catch (error) {
-          throw new Error(`Failed to parse response: ${error}.`);
-        }
+        const remaining = normalizedResponse.substring(lastSuccessfulPos).trim();
+        const isDone = remaining === ']' || remaining === '';
+        
+        return {
+          result: result.length ? result : null, 
+          inProgress: !isDone, 
+          remaining: isDone ? '' : remaining
+        };
     },
   },
   {
@@ -132,25 +155,48 @@ const API_CLIENT_MAP = [
         while (normalizedResponse.startsWith(',') || normalizedResponse.startsWith('[')) {
           normalizedResponse = normalizedResponse.substring(1).trim();
         }
-        while (normalizedResponse.endsWith(',') || normalizedResponse.endsWith(']')) {
-          normalizedResponse = normalizedResponse.substring(0, normalizedResponse.length - 1).trim();
-        }
 
         if (!normalizedResponse.length) {
           return {result: null, inProgress: false};
         }
 
-        if (!normalizedResponse.endsWith('}')) {
-          return {result: normalizedResponse, inProgress: true};
+        let result = '';
+        let lastSuccessfulPos = 0;
+        let currentPos = 0;
+
+        while (currentPos < normalizedResponse.length) {
+          const nextBrace = normalizedResponse.indexOf('}', currentPos);
+          if (nextBrace === -1) break;
+          
+          const potentialJson = normalizedResponse.substring(lastSuccessfulPos, nextBrace + 1);
+          try {
+            const parsedResponse = JSON.parse(potentialJson);
+            result += `data: ${JSON.stringify(parsedResponse)}\n\n`;
+            lastSuccessfulPos = nextBrace + 1;
+            
+            // Skip over any trailing commas or whitespace
+            while (lastSuccessfulPos < normalizedResponse.length && 
+                   (normalizedResponse[lastSuccessfulPos] === ',' || 
+                    normalizedResponse[lastSuccessfulPos] === ' ' || 
+                    normalizedResponse[lastSuccessfulPos] === '\n' || 
+                    normalizedResponse[lastSuccessfulPos] === '\r')) {
+              lastSuccessfulPos++;
+            }
+            currentPos = lastSuccessfulPos;
+          } catch (error) {
+            // Not a complete object (maybe nested braces), keep looking
+            currentPos = nextBrace + 1;
+          }
         }
 
-        try {
-          const parsedResponse = JSON.parse(`${normalizedResponse}`);
-          const transformedResponse = `data: ${JSON.stringify(parsedResponse)}\n\n`;
-          return {result: transformedResponse, inProgress: false};
-        } catch (error) {
-          throw new Error(`Failed to parse response: ${error}.`);
-        }
+        const remaining = normalizedResponse.substring(lastSuccessfulPos).trim();
+        const isDone = remaining === ']' || remaining === '';
+        
+        return {
+          result: result.length ? result : null, 
+          inProgress: !isDone, 
+          remaining: isDone ? '' : remaining
+        };
     },
   },
 ].map((client) => ({ ...client, patternInfo: parsePattern(client.patternForProxy) }));
@@ -336,10 +382,14 @@ app.post('/api-proxy', async (req, res) => {
             const decodedChunk = decoder.decode(encodedChunk, { stream: true });
             deltaChunk = deltaChunk + decodedChunk;
 
-            const {result, inProgress} = apiClient.transformFn(deltaChunk);
-            if (result && !inProgress) {
-              deltaChunk = '';
+            const {result, inProgress, remaining} = apiClient.transformFn(deltaChunk);
+            if (result) {
               res.write(new TextEncoder().encode(result));
+            }
+            if (inProgress) {
+              deltaChunk = remaining !== undefined ? remaining : deltaChunk;
+            } else {
+              deltaChunk = '';
             }
           }
         } catch (error) {
@@ -399,24 +449,35 @@ app.get(/.*/, (req, res, next) => {
 // --- System Instruction Management ---
 const storage = new Storage();
 const INSTRUCTIONS_BUCKET = 'caregivercorpus'; 
-const INSTRUCTIONS_PATH = 'config/instructions.txt';
+const INSTRUCTIONS_PATH = 'Rules/SCD Prompt .txt';
+const GREETING_PATH = 'Rules/SCD Greeting.txt';
 
 app.get('/api/config/instructions', async (req, res) => {
   try {
     const bucket = storage.bucket(INSTRUCTIONS_BUCKET);
-    const file = bucket.file(INSTRUCTIONS_PATH);
     
-    const [exists] = await file.exists();
-    if (!exists) {
-      console.log(`Instructions file not found at gs://${INSTRUCTIONS_BUCKET}/${INSTRUCTIONS_PATH}, using default.`);
-      return res.json({ instructions: null });
+    // Fetch Instructions
+    const instructionsFile = bucket.file(INSTRUCTIONS_PATH);
+    const [instructionsExists] = await instructionsFile.exists();
+    let instructions = null;
+    if (instructionsExists) {
+      const [content] = await instructionsFile.download();
+      instructions = content.toString();
     }
 
-    const [content] = await file.download();
-    res.json({ instructions: content.toString() });
+    // Fetch Greeting
+    const greetingFile = bucket.file(GREETING_PATH);
+    const [greetingExists] = await greetingFile.exists();
+    let greeting = null;
+    if (greetingExists) {
+      const [content] = await greetingFile.download();
+      greeting = content.toString();
+    }
+
+    res.json({ instructions, greeting });
   } catch (error) {
-    console.error('Error fetching instructions from GCS:', error);
-    res.json({ instructions: null });
+    console.error('Error fetching config from GCS:', error);
+    res.json({ instructions: null, greeting: null });
   }
 });
 

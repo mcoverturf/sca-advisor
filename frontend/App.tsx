@@ -1,29 +1,27 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
 import { Message, AppSettings, GroundingSource } from './types';
-import { SettingsPanel } from './components/SettingsPanel';
 import { ChatBubble } from './components/ChatBubble';
-import { SendIcon, SettingsIcon, LoaderIcon } from './components/Icons';
-import { SYSTEM_INSTRUCTION } from './prompts';
+import { SendIcon, LoaderIcon } from './components/Icons';
+import { SYSTEM_INSTRUCTION, GREETING_MESSAGE } from './prompts';
 
 const DEFAULT_DATASTORE = 'caregiver-corpus_1782918777478';
 const DEFAULT_PROJECT_ID = 'gen-lang-client-0240369598';
 
 export default function App() {
-  const [settings, setSettings] = useState<AppSettings>({
+  const [settings] = useState<AppSettings>({
     projectId: 'gen-lang-client-0240369598',
     location: 'us',
     datastoreId: 'caregiver-corpus_1782918777478'
   });
-  
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -44,12 +42,7 @@ export default function App() {
   }, [input]);
 
   const initChat = async () => {
-    if (!settings.projectId.trim()) {
-      setError("Please configure your Project ID in settings.");
-      setIsSettingsOpen(true);
-      return;
-    }
-    
+
     setError(null);
     setIsConnecting(true);
     try {
@@ -57,14 +50,18 @@ export default function App() {
       const datastorePath = `projects/${settings.projectId}/locations/${settings.location}/collections/default_collection/dataStores/${settings.datastoreId}`;
 
       let activeInstructions = SYSTEM_INSTRUCTION;
+      let activeGreeting = GREETING_MESSAGE;
       try {
         const resp = await fetch('/api/config/instructions');
         const data = await resp.json();
         if (data.instructions) {
           activeInstructions = data.instructions;
         }
+        if (data.greeting) {
+          activeGreeting = data.greeting;
+        }
       } catch (e) {
-        console.warn('Failed to fetch remote instructions, using default.', e);
+        console.warn('Failed to fetch remote config, using default.', e);
       }
 
       const session = ai.chats.create({
@@ -77,22 +74,20 @@ export default function App() {
                 datastore: datastorePath
               }
             }
-          }] as any 
+          }] as any
         }
       });
-      
+
       setChatSession(session);
-      setMessages([{ 
-        role: 'model', 
-        text: 'Hello. I am the Sickle Cell Advisor, I will try to answer your questions about sickle cell anemia.' 
+      setMessages([{
+        role: 'model',
+        text: activeGreeting
       }]);
-      setIsSettingsOpen(false);
-      
+
     } catch (err: any) {
       console.error("Initialization error:", err);
       setError(`Failed to initialize chat: ${err.message || 'Unknown error'}`);
       setChatSession(null);
-      setIsSettingsOpen(true);
     } finally {
       setIsConnecting(false);
     }
@@ -117,7 +112,7 @@ export default function App() {
       // Pre-send reinforcement to prevent context drift
       const strictReminder = "\n\n[STRICT REMINDER: Answer ONLY using the medical corpus. If the answer isn't there, say you don't know. Do not speculate.]";
       const responseStream = await chatSession.sendMessageStream({ message: userText + strictReminder });
-      
+
       setMessages(prev => [...prev, { role: 'model', text: '', isStreaming: true }]);
 
       let fullResponse = '';
@@ -126,7 +121,7 @@ export default function App() {
       for await (const chunk of responseStream) {
         const chunkText = chunk.text || '';
         fullResponse += chunkText;
-        
+
         const candidate = chunk.candidates?.[0];
         const groundingMetadata = candidate?.groundingMetadata;
         if (groundingMetadata?.groundingChunks) {
@@ -134,10 +129,10 @@ export default function App() {
           const sourcesList: GroundingSource[] = chunks.map((c: any) => {
             const uri = c.web?.uri || c.retrievalChunk?.uri || c.retrievalChunk?.source?.uri || c.retrievalChunk?.metadata?.uri || '';
             const title = c.web?.title || c.retrievalChunk?.title || c.retrievalChunk?.source?.title || c.retrievalChunk?.metadata?.title || '';
-            
+
             let bucketName = undefined;
             let fileName = undefined;
-            
+
             // Parse Google Cloud Storage URIs (e.g., gs://caregivercorpus/file.pdf)
             if (uri.startsWith('gs://')) {
               const pathParts = uri.replace('gs://', '').split('/');
@@ -145,8 +140,8 @@ export default function App() {
               fileName = pathParts.slice(1).join('/');
             }
 
-            return { 
-              title: title || fileName || uri.split('/').pop() || 'Document', 
+            return {
+              title: title || fileName || uri.split('/').pop() || 'Document',
               uri,
               bucketName,
               fileName
@@ -161,9 +156,9 @@ export default function App() {
 
         setMessages(prev => {
           const newMsgs = [...prev];
-          newMsgs[newMsgs.length - 1] = { 
-            role: 'model', 
-            text: fullResponse, 
+          newMsgs[newMsgs.length - 1] = {
+            role: 'model',
+            text: fullResponse,
             isStreaming: true,
             sources: extractedSources.length > 0 ? extractedSources : undefined
           };
@@ -173,9 +168,9 @@ export default function App() {
 
       setMessages(prev => {
         const newMsgs = [...prev];
-        newMsgs[newMsgs.length - 1] = { 
-          role: 'model', 
-          text: fullResponse, 
+        newMsgs[newMsgs.length - 1] = {
+          role: 'model',
+          text: fullResponse,
           isStreaming: false,
           sources: extractedSources.length > 0 ? extractedSources : undefined
         };
@@ -201,33 +196,22 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans overflow-hidden relative">
-      
-      <SettingsPanel 
-        settings={settings}
-        setSettings={setSettings}
-        onSave={initChat}
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
+
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
-        
+
         {/* Header */}
         <header className="h-20 bg-white border-b flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setIsSettingsOpen(!isSettingsOpen)} 
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="Toggle settings"
-            >
-              <SettingsIcon className="w-5 h-5" />
-            </button>
+            <div className="p-2">
+              <img src="/logo.png" alt="SCD Advisor Logo" className="w-8 h-8 object-contain" />
+            </div>
             <div>
               <h1 className="text-xl font-bold text-gray-800 leading-tight">Sickle Cell Advisor</h1>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="hidden lg:flex flex-col items-end justify-center text-right">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none mb-0.5">Maryland Department of Health</span>
@@ -236,17 +220,17 @@ export default function App() {
             <div className="h-12 w-px bg-gray-200 hidden lg:block mx-1"></div>
             <img src="/mdh-logo.jpg" alt="Maryland Department of Health" className="h-12 w-auto object-contain" />
             <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 ml-2">
-               <span className={`w-2 h-2 rounded-full ${chatSession ? 'bg-green-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`}></span>
-               <span className="text-xs text-gray-600 font-medium">
-                 {chatSession ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
-               </span>
+              <span className={`w-2 h-2 rounded-full ${chatSession ? 'bg-green-500' : isConnecting ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`}></span>
+              <span className="text-xs text-gray-600 font-medium">
+                {chatSession ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+              </span>
             </div>
           </div>
         </header>
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 bg-gray-50/50">
-          {messages.length === 0 && !error && !isSettingsOpen && (
+          {messages.length === 0 && !error && (
             <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
               <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
                 <LoaderIcon className="w-8 h-8 text-blue-500 animate-spin" />
@@ -258,13 +242,13 @@ export default function App() {
           {messages.map((msg, idx) => (
             <ChatBubble key={idx} message={msg} />
           ))}
-          
+
           {error && (
             <div className="flex justify-center my-4">
               <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm border border-red-200 max-w-lg text-center shadow-sm">
                 {error}
                 <div className="mt-2">
-                  <button 
+                  <button
                     onClick={initChat}
                     className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded text-xs font-semibold transition-colors"
                   >
@@ -305,7 +289,7 @@ export default function App() {
             </p>
           </div>
         </div>
-        
+
       </div>
     </div>
   );

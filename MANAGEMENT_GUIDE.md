@@ -18,7 +18,7 @@ To give the agent new medical information, follow these steps:
 ## 2. Managing Agent Behavior (The Prompt)
 You can change the agent's "personality" or rules without touching any code:
 
-1.  **Find the Instruction File**: In your bucket, go to the folder `config` and open `instructions.txt`.
+1.  **Find the Instruction File**: In your bucket, go to the folder `Rules` and open `SCD Prompt .txt`.
 2.  **Edit**: Click the **"Edit"** button. Type your new rules or instructions.
 3.  **Save**: Click **"Save"**.
 4.  **Update**: Users just need to **refresh their browser** to see the new behavior in their next chat.

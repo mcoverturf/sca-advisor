@@ -30,8 +30,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message }) => {
 
   return (
     <div className={`flex gap-4 max-w-[85%] ${alignClass}`}>
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${isUser ? 'bg-blue-700' : 'bg-teal-600'}`}>
-        {isUser ? <UserIcon className="w-5 h-5 text-white" /> : <BotIcon className="w-5 h-5 text-white" />}
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${isUser ? 'bg-blue-700' : 'bg-white border'}`}>
+        {isUser ? <UserIcon className="w-5 h-5 text-white" /> : <img src="/logo.png" alt="SCD Advisor" className="w-6 h-6 object-contain" />}
       </div>
       <div className="flex flex-col gap-1.5">
         <div className={`px-5 py-3.5 rounded-2xl ${bubbleClass} leading-relaxed text-[15px]`}>
