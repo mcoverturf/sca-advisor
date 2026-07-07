@@ -1,0 +1,16 @@
+# Ignore git directory
+.git/
+
+# Ignore node_modules
+**/node_modules/
+
+# Ignore local build artifacts and IDE folders
+**/dist/
+.DS_Store
+.antigravity-ide/
+.gemini/
+*.log
+deploy_output.txt
+iam_output.txt
+scd_greeting.txt
+scd_prompt*.txt

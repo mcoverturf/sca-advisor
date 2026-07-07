@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+**/dist/
+**/build/
+
+# Logs
+*.log
+
+# Local gcloud command output / scratch
+*_output.txt
+
+# Local prompt/greeting scratch copies (source of truth is GCS: caregivercorpus/Rules/)
+scd_prompt*.txt
+scd_greeting.txt
+SCD Greeting.txt
+
+# Local IDE / tooling
+.antigravity-ide/
+.gemini/
+
+# Env files (keep committed .env.local out of future accidental edits is NOT enforced here;
+# .env.local is already tracked — do not add new secrets to untracked env files)
+.env
