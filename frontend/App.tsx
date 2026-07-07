@@ -3,7 +3,6 @@ import { GoogleGenAI, Chat } from '@google/genai';
 import { Message, AppSettings, GroundingSource } from './types';
 import { ChatBubble } from './components/ChatBubble';
 import { SendIcon, LoaderIcon } from './components/Icons';
-import { SYSTEM_INSTRUCTION, GREETING_MESSAGE } from './prompts';
 
 const DEFAULT_DATASTORE = 'caregiver-corpus_1782918777478';
 const DEFAULT_PROJECT_ID = 'gen-lang-client-0240369598';
@@ -49,20 +48,19 @@ export default function App() {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY, vertexai: true });
       const datastorePath = `projects/${settings.projectId}/locations/${settings.location}/collections/default_collection/dataStores/${settings.datastoreId}`;
 
-      let activeInstructions = SYSTEM_INSTRUCTION;
-      let activeGreeting = GREETING_MESSAGE;
-      try {
-        const resp = await fetch('/api/config/instructions');
-        const data = await resp.json();
-        if (data.instructions) {
-          activeInstructions = data.instructions;
-        }
-        if (data.greeting) {
-          activeGreeting = data.greeting;
-        }
-      } catch (e) {
-        console.warn('Failed to fetch remote config, using default.', e);
+      let activeInstructions = '';
+      let activeGreeting = '';
+      
+      const resp = await fetch('/api/config/instructions');
+      if (!resp.ok) {
+        throw new Error('Failed to fetch configuration from GCS');
       }
+      const data = await resp.json();
+      if (!data.instructions || !data.greeting) {
+        throw new Error('Required configuration (instructions or greeting) is missing from GCS');
+      }
+      activeInstructions = data.instructions;
+      activeGreeting = data.greeting;
 
       const session = ai.chats.create({
         model: 'gemini-3.5-flash',
