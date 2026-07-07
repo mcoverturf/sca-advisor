@@ -443,20 +443,6 @@ app.post('/api-proxy', async (req, res) => {
   }
 });
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Serve static files from Vite build directory
-const frontendDistPath = path.join(__dirname, '../frontend/dist');
-app.use(express.static(frontendDistPath));
-
-// Fallback all other GET requests to index.html for SPA routing
-app.get(/.*/, (req, res, next) => {
-  if (req.path.startsWith('/api-proxy') || req.path.startsWith('/ws-proxy')) {
-    return next();
-  }
-  res.sendFile(path.join(frontendDistPath, 'index.html'));
-});
 
 // --- System Instruction Management ---
 const storage = new Storage();
@@ -491,6 +477,21 @@ app.get('/api/config/instructions', async (req, res) => {
     console.error('Error fetching config from GCS:', error);
     res.json({ instructions: null, greeting: null });
   }
+});
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files from Vite build directory
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+app.use(express.static(frontendDistPath));
+
+// Fallback all other GET requests to index.html for SPA routing
+app.get(/.*/, (req, res, next) => {
+  if (req.path.startsWith('/api-proxy') || req.path.startsWith('/ws-proxy')) {
+    return next();
+  }
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
 });
 
 const server = app.listen(PORT, API_BACKEND_HOST, () => {
