@@ -66,6 +66,7 @@ export default function App() {
         model: 'gemini-3.5-flash',
         config: {
           systemInstruction: activeInstructions,
+          temperature: 0.0,
           tools: [{
             retrieval: {
               vertexAiSearch: {
@@ -97,19 +98,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSend = async () => {
-    if (!input.trim() || !chatSession || isLoading) return;
-
-    const userText = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userText }]);
-    setIsLoading(true);
-    setError(null);
-
+  const performSend = async (userText: string, retryCount: number = 0) => {
     try {
-      // Pre-send reinforcement to prevent context drift
-      const strictReminder = "\n\n[STRICT REMINDER: Answer ONLY using the medical corpus. If the answer isn't there, say you don't know. Do not speculate.]";
-      const responseStream = await chatSession.sendMessageStream({ message: userText + strictReminder });
+      let strictReminder = "\n\n[STRICT REMINDER: Answer ONLY using the medical corpus. If the answer isn't there, say you don't know. Do not speculate.]";
+      if (retryCount > 0) {
+        strictReminder += "\n[ADDITIONAL REMINDER: Your previous response did not cite the provided dataset. You MUST ground your answer in the provided dataset. Do not use outside knowledge.]";
+      }
+      
+      const responseStream = await chatSession!.sendMessageStream({ message: userText + strictReminder });
 
       setMessages(prev => [...prev, { role: 'model', text: '', isStreaming: true }]);
 
@@ -131,7 +127,6 @@ export default function App() {
             let bucketName = undefined;
             let fileName = undefined;
 
-            // Parse Google Cloud Storage URIs (e.g., gs://caregivercorpus/file.pdf)
             if (uri.startsWith('gs://')) {
               const pathParts = uri.replace('gs://', '').split('/');
               bucketName = pathParts[0];
@@ -164,6 +159,15 @@ export default function App() {
         });
       }
 
+      const wasGrounded = extractedSources.length > 0;
+      
+      if (!wasGrounded && fullResponse.trim().length > 0 && retryCount < 1) {
+        console.log("[Grounding Gate] Response ungrounded. Silently retrying...");
+        setMessages(prev => prev.slice(0, -1)); // Remove the ungrounded stream message
+        await performSend(userText, retryCount + 1);
+        return;
+      }
+
       setMessages(prev => {
         const newMsgs = [...prev];
         newMsgs[newMsgs.length - 1] = {
@@ -179,10 +183,22 @@ export default function App() {
       console.error("Send message error:", err);
       setError(`Error communicating with the agent: ${err.message || 'Unknown error'}`);
       setMessages(prev => prev.filter(m => m.isStreaming !== true));
-    } finally {
-      setIsLoading(false);
-      setTimeout(() => textareaRef.current?.focus(), 10);
     }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || !chatSession || isLoading) return;
+
+    const userText = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userText }]);
+    setIsLoading(true);
+    setError(null);
+
+    await performSend(userText);
+    
+    setIsLoading(false);
+    setTimeout(() => textareaRef.current?.focus(), 10);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
