@@ -479,12 +479,139 @@ app.get('/api/config/instructions', async (req, res) => {
   }
 });
 
+// --- Admin: Knowledge Base (Vertex AI Search datastore) Management ---
+// Simple facility for non-technical staff to sync the GCS corpus bucket
+// into the Vertex AI Search datastore and verify what is indexed.
+// Protected by a shared access code (ADMIN_KEY env var). If ADMIN_KEY is
+// not set, these endpoints are disabled.
+const ADMIN_KEY = process?.env?.ADMIN_KEY;
+const CORPUS_BUCKET = 'caregivercorpus';
+const DATASTORE_LOCATION = 'us'; // Vertex AI Search datastore location (multi-region)
+const DATASTORE_ID = 'caregiver-corpus_1782918777478';
+const DISCOVERY_HOST = `https://${DATASTORE_LOCATION}-discoveryengine.googleapis.com`;
+const DATASTORE_BRANCH_PATH = `projects/${GOOGLE_CLOUD_PROJECT}/locations/${DATASTORE_LOCATION}/collections/default_collection/dataStores/${DATASTORE_ID}/branches/default_branch`;
+// Operation names returned by the import API use the project *number* rather
+// than the project id, so validate the shape rather than the exact prefix.
+const OPERATION_NAME_REGEX = /^projects\/[a-z0-9-]+\/locations\/us\/collections\/default_collection\/dataStores\/caregiver-corpus_1782918777478\/branches\/[A-Za-z0-9_-]+\/operations\/[A-Za-z0-9._-]+$/;
+
+function requireAdmin(req, res) {
+  if (!ADMIN_KEY) {
+    res.status(503).json({ error: 'Admin features are not configured (ADMIN_KEY is not set).' });
+    return false;
+  }
+  if (req.headers['x-admin-key'] !== ADMIN_KEY) {
+    res.status(403).json({ error: 'Invalid access code.' });
+    return false;
+  }
+  return true;
+}
+
+app.use('/api/admin', proxyLimiter);
+
+// List the file names currently in the search index.
+app.get('/api/admin/documents', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const accessToken = await getAccessToken(res);
+    if (!accessToken) return;
+    const docs = [];
+    let pageToken = '';
+    do {
+      const url = `${DISCOVERY_HOST}/v1/${DATASTORE_BRANCH_PATH}/documents?pageSize=100${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const r = await fetch(url, { headers: getRequestHeaders(accessToken) });
+      const data = await r.json();
+      if (!r.ok) return res.status(r.status).json(data);
+      for (const d of (data.documents || [])) {
+        const uri = d?.content?.uri || '';
+        docs.push({ id: d.id, uri, fileName: uri.replace(`gs://${CORPUS_BUCKET}/`, '') });
+      }
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+    res.json({ count: docs.length, documents: docs });
+  } catch (error) {
+    console.error('[Admin] Error listing documents:', error);
+    res.status(500).json({ error: 'Failed to list indexed documents.' });
+  }
+});
+
+// List the PDFs currently in the GCS bucket (what *should* be indexed).
+app.get('/api/admin/bucket-files', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const [files] = await storage.bucket(CORPUS_BUCKET).getFiles();
+    const pdfs = files
+      .map(f => f.name)
+      .filter(n => n.toLowerCase().endsWith('.pdf') && !n.startsWith('Rules/'));
+    res.json({ count: pdfs.length, files: pdfs });
+  } catch (error) {
+    console.error('[Admin] Error listing bucket files:', error);
+    res.status(500).json({ error: 'Failed to list bucket files.' });
+  }
+});
+
+// Trigger an incremental import of top-level PDFs from the bucket into the
+// datastore. Excludes the Rules/ folder (system prompt/greeting) by only
+// importing *.pdf at the bucket root.
+app.post('/api/admin/reimport', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const accessToken = await getAccessToken(res);
+    if (!accessToken) return;
+    const url = `${DISCOVERY_HOST}/v1/${DATASTORE_BRANCH_PATH}/documents:import`;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: getRequestHeaders(accessToken),
+      body: JSON.stringify({
+        gcsSource: { inputUris: [`gs://${CORPUS_BUCKET}/*.pdf`], dataSchema: 'content' },
+        reconciliationMode: 'INCREMENTAL',
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json(data);
+    console.log(`[Admin] Import started: ${data.name}`);
+    res.json({ operation: data.name });
+  } catch (error) {
+    console.error('[Admin] Error starting import:', error);
+    res.status(500).json({ error: 'Failed to start the import.' });
+  }
+});
+
+// Check the status of a running import operation.
+app.get('/api/admin/import-status', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const op = req.query.op;
+  if (typeof op !== 'string' || !OPERATION_NAME_REGEX.test(op)) {
+    return res.status(400).json({ error: 'Invalid operation name.' });
+  }
+  try {
+    const accessToken = await getAccessToken(res);
+    if (!accessToken) return;
+    const r = await fetch(`${DISCOVERY_HOST}/v1/${op}`, { headers: getRequestHeaders(accessToken) });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json(data);
+    res.json({
+      done: data.done === true,
+      successCount: data?.metadata?.successCount || '0',
+      failureCount: data?.metadata?.failureCount || '0',
+      errors: data?.error || null,
+    });
+  } catch (error) {
+    console.error('[Admin] Error checking import status:', error);
+    res.status(500).json({ error: 'Failed to check import status.' });
+  }
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Serve static files from Vite build directory
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
 app.use(express.static(frontendDistPath));
+
+// Admin page for knowledge base management (see /api/admin/* endpoints above)
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
 
 // Fallback all other GET requests to index.html for SPA routing
 app.get(/.*/, (req, res, next) => {

@@ -18,6 +18,7 @@ RUN npm install --omit=dev
 
 COPY --from=builder /app/frontend/dist ./frontend/dist
 COPY --from=builder /app/backend/server.js ./backend/server.js
+COPY --from=builder /app/backend/admin.html ./backend/admin.html
 
 EXPOSE 5000
 ENV API_BACKEND_PORT=5000

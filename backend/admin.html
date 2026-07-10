@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sickle Cell Advisor — Knowledge Base Manager</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f3f4f6; color: #1f2937; padding: 24px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .card h2 { font-size: 16px; margin-bottom: 8px; }
+  .card p { font-size: 14px; color: #4b5563; margin-bottom: 12px; line-height: 1.5; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.secondary { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+  input[type=password] { padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 15px; width: 260px; }
+  .status { margin-top: 14px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; line-height: 1.5; }
+  .status.info { display: block; background: #eff6ff; color: #1e40af; }
+  .status.ok { display: block; background: #ecfdf5; color: #065f46; }
+  .status.err { display: block; background: #fef2f2; color: #991b1b; }
+  ul.docs { list-style: none; margin-top: 10px; }
+  ul.docs li { font-size: 13px; padding: 6px 10px; border-bottom: 1px solid #f3f4f6; }
+  ul.docs li.missing { background: #fef2f2; color: #991b1b; font-weight: 600; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
+  .badge.green { background: #d1fae5; color: #065f46; }
+  .badge.red { background: #fee2e2; color: #991b1b; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #93c5fd; border-top-color: #1d4ed8; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Knowledge Base Manager</h1>
+  <div class="sub">Sickle Cell Advisor — Maryland Department of Health</div>
+
+  <div class="card" id="loginCard">
+    <h2>Sign in</h2>
+    <p>Enter the access code you were given.</p>
+    <input type="password" id="adminKey" placeholder="Access code" onkeydown="if(event.key==='Enter')login()">
+    <button onclick="login()">Sign in</button>
+    <div class="status" id="loginStatus"></div>
+  </div>
+
+  <div id="mainUi" style="display:none">
+    <div class="card">
+      <h2>Step 1 — Check what the Advisor knows</h2>
+      <p>This compares the documents you have uploaded to the corpus with the documents the Advisor can actually use. Any document highlighted in red has been uploaded but is <b>not yet available to the Advisor</b>.</p>
+      <button class="secondary" onclick="checkDocs()">Check documents</button>
+      <div class="status" id="checkStatus"></div>
+      <ul class="docs" id="docList"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Step 2 — Update the knowledge base</h2>
+      <p>Click this after you add or replace documents in the corpus. It usually finishes in <b>5–15 minutes</b>. You can leave this page open — it will tell you when it's done.</p>
+      <button id="importBtn" onclick="runImport()">Update knowledge base</button>
+      <div class="status" id="importStatus"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let KEY = sessionStorage.getItem('adminKey') || '';
+
+function hdrs() { return { 'x-admin-key': KEY, 'Content-Type': 'application/json' }; }
+function show(id, cls, html) { const el = document.getElementById(id); el.className = 'status ' + cls; el.innerHTML = html; }
+
+async function login() {
+  const entered = document.getElementById('adminKey').value.trim();
+  if (entered) KEY = entered;
+  const r = await fetch('/api/admin/documents', { headers: hdrs() });
+  if (r.status === 403) { show('loginStatus', 'err', 'That access code is not correct.'); return; }
+  if (!r.ok) { show('loginStatus', 'err', 'Could not connect. Please try again or contact support.'); return; }
+  sessionStorage.setItem('adminKey', KEY);
+  document.getElementById('loginCard').style.display = 'none';
+  document.getElementById('mainUi').style.display = 'block';
+  checkDocs();
+}
+
+async function checkDocs() {
+  show('checkStatus', 'info', '<span class="spinner"></span>Checking…');
+  document.getElementById('docList').innerHTML = '';
+  try {
+    const [ir, br] = await Promise.all([
+      fetch('/api/admin/documents', { headers: hdrs() }),
+      fetch('/api/admin/bucket-files', { headers: hdrs() }),
+    ]);
+    const indexed = await ir.json();
+    const bucket = await br.json();
+    if (!ir.ok || !br.ok) throw new Error('server');
+    const indexedNames = new Set(indexed.documents.map(d => d.fileName));
+    const missing = bucket.files.filter(f => !indexedNames.has(f));
+    let html = '';
+    for (const f of bucket.files) {
+      const ok = indexedNames.has(f);
+      html += `<li class="${ok ? '' : 'missing'}">${f}<span class="badge ${ok ? 'green' : 'red'}">${ok ? 'Available' : 'NOT available yet'}</span></li>`;
+    }
+    document.getElementById('docList').innerHTML = html;
+    if (missing.length === 0) {
+      show('checkStatus', 'ok', `All ${bucket.files.length} documents are available to the Advisor. No update needed.`);
+    } else {
+      show('checkStatus', 'err', `${missing.length} of ${bucket.files.length} document(s) are NOT yet available to the Advisor. Please run Step 2.`);
+    }
+  } catch (e) {
+    show('checkStatus', 'err', 'Something went wrong while checking. Please try again.');
+  }
+}
+
+async function runImport() {
+  const btn = document.getElementById('importBtn');
+  btn.disabled = true;
+  show('importStatus', 'info', '<span class="spinner"></span>Starting the update…');
+  try {
+    const r = await fetch('/api/admin/reimport', { method: 'POST', headers: hdrs() });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'server');
+    pollStatus(data.operation, btn);
+  } catch (e) {
+    btn.disabled = false;
+    show('importStatus', 'err', 'The update could not be started. Please try again or contact support.');
+  }
+}
+
+async function pollStatus(op, btn) {
+  const started = Date.now();
+  const timer = setInterval(async () => {
+    const mins = Math.floor((Date.now() - started) / 60000);
+    try {
+      const r = await fetch('/api/admin/import-status?op=' + encodeURIComponent(op), { headers: hdrs() });
+      const s = await r.json();
+      if (!r.ok) throw new Error('server');
+      if (s.done) {
+        clearInterval(timer);
+        btn.disabled = false;
+        if (s.errors || Number(s.failureCount) > 0) {
+          show('importStatus', 'err', `The update finished, but ${s.failureCount} document(s) failed to load. Please contact support.`);
+        } else {
+          show('importStatus', 'ok', 'Update complete! It can take up to 15 more minutes for new documents to become searchable. Use Step 1 to confirm, then test the Advisor.');
+        }
+        checkDocs();
+      } else {
+        show('importStatus', 'info', `<span class="spinner"></span>Updating… (running for ${mins} min — this is normal, please keep this page open)`);
+      }
+    } catch (e) { /* transient — keep polling */ }
+  }, 10000);
+}
+
+if (KEY) { login(); } else { /* wait for user */ }
+</script>
+</body>
+</html>

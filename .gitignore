@@ -28,3 +28,6 @@ SCD Greeting.txt
 # Env files (keep committed .env.local out of future accidental edits is NOT enforced here;
 # .env.local is already tracked — do not add new secrets to untracked env files)
 .env
+
+# Local mirror of GCS bucket contents (source of truth is GCS, not git)
+bucket-contents/
